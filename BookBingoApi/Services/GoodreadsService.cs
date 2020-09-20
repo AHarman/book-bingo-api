@@ -2,6 +2,7 @@
 using BookBingoApi.Dtos.Goodreads.Search.Books;
 using BookBingoApi.Dtos.Goodreads.Shelf;
 using BookBingoApi.Dtos.Goodreads.User;
+using BookBingoApi.Exceptions;
 using BookBingoApi.Models;
 using BookBingoApi.Options;
 using Microsoft.Extensions.Options;
@@ -35,12 +36,9 @@ namespace BookBingoApi.Services
         public async Task<IEnumerable<Book>> SearchBooksAsync(string query)
         {
             var serializer = new XmlSerializer(typeof(BookSearchResponse));
-            var response = await _httpClient
-                .GetAsync($"{_httpClient.BaseAddress}search/index.xml?key={_options.Value.ApiKey}&q={query}");
+            var message = new HttpRequestMessage(HttpMethod.Get, $"{_httpClient.BaseAddress}search/index.xml?key={_options.Value.ApiKey}&q={query}");
+            var response = await MakeRequest(message);
 
-            if (!response.IsSuccessStatusCode) return new List<Book>();
-
-            var responseText = await response.Content.ReadAsStringAsync();
             var responseBody = serializer.Deserialize(await response.Content.ReadAsStreamAsync()) as BookSearchResponse;
             return _mapper.Map<IEnumerable<Book>>(responseBody.Result.Items);
         }
@@ -56,8 +54,7 @@ namespace BookBingoApi.Services
             };
             await _oauthService.SignRequestAsync(request, session);
 
-            var response = await _httpClient.SendAsync(request);
-            var responseText = await response.Content.ReadAsStringAsync();
+            var response = await MakeRequest(request);
             var responseBody = serializer.Deserialize(await response.Content.ReadAsStreamAsync()) as ShelfResponse;
             return _mapper.Map<IEnumerable<BookshelfEntry>>(responseBody.Result.Items);
         }
@@ -66,12 +63,22 @@ namespace BookBingoApi.Services
         {
             var serializer = new XmlSerializer(typeof(UserResponse));
             var request = await _oauthService.SignRequestAsync(new HttpRequestMessage(HttpMethod.Get, $"{_httpClient.BaseAddress}api/auth_user"), session);
-            var response = await _httpClient.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode) return null;
+            var response = await MakeRequest(request);
 
             var responseBody = serializer.Deserialize(await response.Content.ReadAsStreamAsync()) as UserResponse;
             return _mapper.Map<Models.User>(responseBody.User);
+        }
+
+        private async Task<HttpResponseMessage> MakeRequest(HttpRequestMessage request)
+        {
+            var response = await _httpClient.SendAsync(request);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                throw new ApiNotAuthorisedException(request.RequestUri);
+            }
+
+            return response;
         }
     }
 }

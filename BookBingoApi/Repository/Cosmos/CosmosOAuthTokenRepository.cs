@@ -1,9 +1,11 @@
 ﻿using AutoMapper;
+using BookBingoApi.Exceptions;
 using BookBingoApi.Models;
 using BookBingoApi.Options;
 using BookBingoApi.Repository.Cosmos.Daos;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Options;
+using System.Net;
 using System.Threading.Tasks;
 
 namespace BookBingoApi.Repository.Cosmos
@@ -27,8 +29,15 @@ namespace BookBingoApi.Repository.Cosmos
 
         public async Task<OAuthToken> GetToken(string id, string provider)
         {
-            var response = await _container.ReadItemAsync<OAuthTokenDao>(id, new PartitionKey(provider));
-            return _mapper.Map<OAuthToken>(response.Resource);
+            try
+            {
+                var response = await _container.ReadItemAsync<OAuthTokenDao>(id, new PartitionKey(provider));
+                return _mapper.Map<OAuthToken>(response.Resource);
+            }
+            catch (CosmosException e) when (e.StatusCode == HttpStatusCode.NotFound)
+            {
+                throw new TokenNotFoundException(id);
+            }
         }
 
         public async Task StoreAccessTokenAsync(OAuthToken token)
