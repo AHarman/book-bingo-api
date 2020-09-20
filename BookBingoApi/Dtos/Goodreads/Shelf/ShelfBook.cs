@@ -20,5 +20,12 @@ namespace BookBingoApi.Dtos.Goodreads.Shelf
 
         [XmlElement("small_image_url")]
         public string SmallCoverUri { get; set; }
+
+        [XmlElement("publication_year")]
+        public string OriginalPublicationYear { get; set; }
+
+        // Need surrogate values because the XML deserialiser can't handle nullable ints...
+        [XmlIgnore]
+        public int? PublicationYear { get => int.TryParse(OriginalPublicationYear, out int value) ? value : null as int?; }
     }
 }
